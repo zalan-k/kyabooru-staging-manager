@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kyabooru Staging Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <h1><span id="status-indicator" class="status-indicator"></span> Kyabooru Staging Manager</h1>
+      <div class="header-actions">
+        <button class="btn btn-warning" onclick="runAnalyzer()">
+          🔍 Analyze Tags
+        </button>
+        <div class="dropdown-container">
+          <button class="btn btn-secondary" onclick="toggleDropdown('import-dropdown')">
+            📥 Import
+          </button>
+          <div class="header-dropdown hidden" id="import-dropdown">
+            <button onclick="importFullConfig()">Full Config</button>
+            <button onclick="importHierarchyOnly()">Hierarchy Only</button>
+            <button onclick="importAliasesOnly()">Aliases Only</button>
+            <button onclick="importExclusionsOnly()">Exclusions Only</button>
+          </div>
+        </div>
+        <button class="btn btn-secondary" onclick="exportConfig()">
+          📤 Export Config
+        </button>
+        <button class="btn btn-ghost" onclick="location.reload()">
+          🔄 Refresh
+        </button>
+      </div>
+    </header>
+
+    <!-- Summary Bar -->
+    <div class="summary-bar">
+      <div class="summary-item">
+        <div class="summary-number" id="stat-images">0</div>
+        <div class="summary-label">Staged Images</div>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-item">
+        <div class="summary-number" id="stat-tags">0</div>
+        <div class="summary-label">Unique Tags</div>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-item">
+        <div class="summary-number orange" id="stat-suggestions">0</div>
+        <div class="summary-label">Suggestions</div>
+      </div>
+      <div class="summary-divider"></div>
+      <div class="summary-item">
+        <div class="summary-number green" id="stat-aliases">0</div>
+        <div class="summary-label">Aliases</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-number red" id="stat-blacklist">0</div>
+        <div class="summary-label">Blacklisted</div>
+      </div>
+
+      <!-- Global Search -->
+      <div class="global-search">
+        <input type="text" class="global-search-input" id="global-search" 
+               placeholder="Search tags across all images...">
+        <div class="autocomplete-dropdown" id="global-search-dropdown"></div>
+      </div>
+    </div>
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <button class="tab active" data-tab="images">
+        📷 Images
+        <span class="tab-badge" id="tab-images-count">0</span>
+      </button>
+      <button class="tab" data-tab="aliases">
+        🔗 Aliases
+        <span class="tab-badge" id="tab-aliases-count">0</span>
+      </button>
+      <button class="tab" data-tab="exclusions">
+        🚫 Exclusions
+        <span class="tab-badge" id="tab-exclusions-count">0</span>
+      </button>
+      <button class="tab" data-tab="hierarchy">
+        🌳 Hierarchy
+        <span class="tab-badge" id="tab-hierarchy-count">0</span>
+      </button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="app-main">
+      <!-- ==================== IMAGES TAB ==================== -->
+      <div class="tab-content active" id="tab-images">
+        <div class="images-container">
+          <div class="images-grid-wrapper" id="images-scroll-container">
+            <div class="images-toolbar">
+              <input type="text" id="images-filter" placeholder="Filter images by tag...">
+              <select id="images-sort">
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="tags-desc">Most Tags</option>
+                <option value="tags-asc">Least Tags</option>
+              </select>
+              <button class="btn btn-small btn-secondary" onclick="loadImages(true)">Reload</button>
+            </div>
+            <div class="images-grid" id="images-grid"></div>
+            <div class="load-more-trigger" id="load-more-trigger" style="display:none;">
+              <div class="spinner"></div>
+              <span>Loading more...</span>
+            </div>
+          </div>
+
+          <!-- Image Sidebar -->
+          <aside class="image-sidebar hidden" id="image-sidebar">
+            <div class="sidebar-header">
+              <h3>Edit Image</h3>
+              <button class="btn btn-icon btn-ghost" onclick="closeSidebar()">✕</button>
+            </div>
+            <div class="sidebar-preview">
+              <img id="sidebar-image" src="" alt="Preview">
+            </div>
+            <div class="sidebar-content">
+              <div class="sidebar-field">
+                <label>Tags</label>
+                <div class="sidebar-tags" id="sidebar-tags"></div>
+                <div class="autocomplete-wrapper">
+                  <input type="text" id="sidebar-tag-input" placeholder="Add tag...">
+                  <div class="autocomplete-dropdown" id="sidebar-tag-dropdown"></div>
+                </div>
+              </div>
+              <div class="sidebar-field">
+                <label>Source URL</label>
+                <input type="text" id="sidebar-source-url" placeholder="https://...">
+              </div>
+              <div class="sidebar-field">
+                <label>Pool</label>
+                <div class="pool-row">
+                  <input type="text" id="sidebar-pool-id" placeholder="Pool ID">
+                  <input type="number" id="sidebar-pool-index" placeholder="#" min="0">
+                  <button class="btn btn-small btn-ghost" onclick="generatePoolId()">New</button>
+                </div>
+              </div>
+              <div class="sidebar-field">
+                <label>Hash (pHash)</label>
+                <input type="text" id="sidebar-phash" disabled>
+              </div>
+            </div>
+            <div class="sidebar-actions">
+              <button class="btn btn-success" onclick="saveCurrentImage()">💾 Save</button>
+              <button class="btn btn-danger" onclick="deleteCurrentImage()">🗑️ Delete</button>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <!-- ==================== ALIASES TAB ==================== -->
+      <div class="tab-content" id="tab-aliases">
+        <div class="aliases-container">
+          <div class="panel-toolbar">
+            <div class="autocomplete-wrapper" style="flex: 2 0 300px; margin-right: 10px;">
+              <input type="text" id="add-alias-input" placeholder="Add alias (e.g. character:ouro_kronii)..." style="width: 100%;">
+              <div class="autocomplete-dropdown" id="add-alias-dropdown"></div>
+            </div>
+            <input type="text" id="aliases-filter" class="toolbar-filter-right" placeholder="Filter aliases..." oninput="filterAliases()">
+          </div>
+
+          <!-- Suggestions -->
+          <div class="suggestions-section" id="alias-suggestions-section" style="display:none;">
+            <h4>⚡ Analyzer Suggestions</h4>
+            <div id="alias-suggestions"></div>
+          </div>
+
+          <!-- User Aliases -->
+          <div id="aliases-list"></div>
+
+          <div class="empty-state" id="aliases-empty" style="display:none;">
+            <div class="empty-state-icon">🔗</div>
+            <div class="empty-state-text">No aliases defined yet.<br>Add one to consolidate variant tags.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== EXCLUSIONS TAB ==================== -->
+      <div class="tab-content" id="tab-exclusions">
+        <div class="exclusions-container">
+          <!-- Blacklist Panel -->
+          <div class="exclusion-panel blacklist">
+            <h3>🚫 Blacklist</h3>
+            <div class="exclusion-filter">
+              <input type="text" id="blacklist-filter" placeholder="Filter blacklist..." oninput="filterBlacklist()">
+            </div>
+            <div class="exclusion-items" id="blacklist-items"></div>
+            <div class="add-exclusion-row">
+              <div class="autocomplete-wrapper" style="flex:1;">
+                <input type="text" id="add-blacklist-input" placeholder="Add tag to blacklist (press Enter)...">
+                <div class="autocomplete-dropdown" id="blacklist-dropdown"></div>
+              </div>
+            </div>
+            <!-- Garbage Suggestions -->
+            <div class="suggestions-section" id="garbage-suggestions-section" style="display:none; margin-top:16px;">
+              <h4>⚡ Garbage Suggestions</h4>
+              <div id="garbage-suggestions"></div>
+            </div>
+          </div>
+
+          <!-- Whitelist Panel -->
+          <div class="exclusion-panel whitelist">
+            <h3>✅ Whitelist</h3>
+            <div class="exclusion-filter">
+              <input type="text" id="whitelist-filter" placeholder="Filter whitelist..." oninput="filterWhitelist()">
+            </div>
+            <div class="exclusion-items" id="whitelist-items"></div>
+            <div class="add-exclusion-row">
+              <div class="autocomplete-wrapper" style="flex:1;">
+                <input type="text" id="add-whitelist-input" placeholder="Add tag to whitelist (press Enter)...">
+                <div class="autocomplete-dropdown" id="whitelist-dropdown"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== HIERARCHY TAB ==================== -->
+      <div class="tab-content" id="tab-hierarchy">
+        <div class="hierarchy-container">
+          <div class="hierarchy-toolbar">
+            <div class="autocomplete-wrapper" style="flex: 1; margin-right: 10px;">
+              <input type="text" id="new-hierarchy-tag" placeholder="Add root tag (e.g. character:ouro_kronii)..." style="width: 100%;">
+              <div class="autocomplete-dropdown" id="hierarchy-tag-dropdown"></div>
+            </div>
+            <button class="btn btn-small btn-ghost" onclick="expandAllHierarchy()">Expand All</button>
+            <button class="btn btn-small btn-ghost" onclick="collapseAllHierarchy()">Collapse All</button>
+            <div style="flex:1;"></div>
+            <input type="text" id="hierarchy-filter" class="toolbar-filter-right" placeholder="Filter hierarchy..." oninput="filterHierarchy()">
+          </div>
+          <div class="hierarchy-tree-wrapper">
+            <div class="hierarchy-tree" id="hierarchy-tree"></div>
+            <div class="hierarchy-empty" id="hierarchy-empty" style="display:none;">
+              No hierarchy defined. Add a root tag to get started.
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Hierarchy Node Modal -->
+  <div class="modal-overlay hidden" id="hierarchy-modal">
+    <div class="modal">
+      <h3 id="hierarchy-modal-title">Add Child Tag</h3>
+      <div class="modal-field">
+        <label>Tag (e.g. character:ouro_kronii)</label>
+        <div class="autocomplete-wrapper">
+          <input type="text" id="hierarchy-modal-tag" placeholder="category:tag_name or just tag_name...">
+          <div class="autocomplete-dropdown" id="hierarchy-modal-dropdown"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('hierarchy-modal')">Cancel</button>
+        <button class="btn btn-primary" id="hierarchy-modal-submit">Add</button>
+      </div>
+    </div>
+  </div>
+  <script src="api.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>
